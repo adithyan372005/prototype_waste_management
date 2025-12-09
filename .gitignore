@@ -1,0 +1,129 @@
+# Dependencies
+node_modules/
+*/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+ml_service/venv/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+backend/data/waste.db
+
+# ML Models and large files
+*.pt
+*.pth
+*.onnx
+*.h5
+*.pkl
+*.model
+ML/models/*.pt
+!ML/models/.gitkeep
+
+# Logs
+*.log
+logs/
+*.out
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Build outputs
+dist/
+build/
+.next/
+.nuxt/
+.vuepress/dist
+
+# Cache directories
+.cache/
+.parcel-cache/
+.npm
+.eslintcache
+
+# Coverage reports
+coverage/
+*.lcov
+.nyc_output
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# ML/AI specific
+*.weights
+*.cfg
+runs/
+wandb/
+.neptune/
+
+# Snapshots and violation images (these can be large)
+*/snapshots/
+snapshots/
+violation_*.jpg
+violation_*.png
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# Lock files (optional - you may want to commit these)
+# package-lock.json
+# yarn.lock

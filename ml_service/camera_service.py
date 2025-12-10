@@ -13,6 +13,25 @@ sys.path.append(str(ML_DIR / "models"))
 
 from ultralytics import YOLO
 
+# Global detection state
+last_detection = {
+    "class": None,
+    "wet_dry": None,
+    "confidence": 0.0,
+    "is_violation": False,
+    "snapshot_path": None,
+}
+
+def save_violation_snapshot(frame):
+    """Save frame when there is a violation and return absolute file path."""
+    snapshots_dir = os.path.join(os.path.dirname(__file__), "snapshots")
+    os.makedirs(snapshots_dir, exist_ok=True)
+
+    filename = f"violation_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
+    filepath = os.path.join(snapshots_dir, filename)
+    cv2.imwrite(filepath, frame)
+    return filepath
+
 class CameraService:
     def __init__(self, bin_type="dry", threshold=0.50):
         self.bin_type = bin_type
@@ -40,20 +59,27 @@ class CameraService:
             print("Warning: Camera not accessible, using dummy mode")
             self.cap = None
         
-        self.latest_result = {
+        self.last_result = {
             "class": None,
             "wet_dry": None,
             "confidence": 0.0,
-            "is_violation": False
+            "is_violation": False,
+            "snapshot_path": None
         }
-    
+
     def save_snapshot(self, frame):
-        """Save violation snapshot."""
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"violation_{timestamp}.jpg"
-        filepath = self.snapshot_dir / filename
-        cv2.imwrite(str(filepath), frame)
-        return str(filepath)
+        import os
+        from datetime import datetime
+
+        folder = os.path.join(os.path.dirname(__file__), "snapshots")
+        os.makedirs(folder, exist_ok=True)
+
+        filename = f"violation_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
+        path = os.path.join(folder, filename)
+
+        cv2.imwrite(path, frame)
+        return path
+    
     
     def detect_and_draw(self, frame):
         """Run YOLO detection and draw overlays."""
@@ -84,14 +110,25 @@ class CameraService:
                 if wrong_bin:
                     violation = True
                 
-                # Draw green box around object
-                color = (0, 255, 0)  # Green box as per requirements
-                cv2.rectangle(frame, (x1, y1), (x2, y2), color, 3)
+                # Color logic for dry & wet
+                if waste_type == "dry":
+                    box_color = (0, 255, 0)   # green
+                else:
+                    box_color = (255, 0, 0)   # blue
+                
+                cv2.rectangle(frame, (x1, y1), (x2, y2), box_color, 3)
                 
                 # Draw label with confidence
                 label = f"{waste_type.upper()} ({conf:.2f})"
-                cv2.putText(frame, label, (x1, y1 - 10),
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
+                cv2.putText(
+                    frame,
+                    label,
+                    (x1, y1 - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.8,
+                    box_color,
+                    2
+                )
             
             # Get top detection
             if confidences:
@@ -99,12 +136,19 @@ class CameraService:
                 detected_class = classes[top_idx]
                 confidence = max(confidences)
         
-        # Update latest result
-        self.latest_result = {
+        # Save snapshot if violation and update global last_detection
+        global last_detection
+        snapshot_path = None
+        if violation:
+            # use raw frame without overlays
+            snapshot_path = save_violation_snapshot(frame.copy())
+
+        last_detection = {
             "class": detected_class,
             "wet_dry": detected_class,
-            "confidence": round(confidence, 2),
-            "is_violation": violation
+            "confidence": float(round(confidence, 2)) if confidence else 0.0,
+            "is_violation": bool(violation),
+            "snapshot_path": snapshot_path,  # absolute path or None
         }
         
         return violation, frame, detected_class, confidence
@@ -160,6 +204,7 @@ class CameraService:
             if frame is None:
                 continue
             
+            
             # Encode frame as JPEG
             ret, buffer = cv2.imencode('.jpg', frame)
             frame_bytes = buffer.tobytes()
@@ -168,10 +213,10 @@ class CameraService:
             yield (b'--frame\r\n'
                    b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
     
-    def get_latest_detection(self):
-        """Get latest detection result as JSON."""
-        return self.latest_result
-    
     def __del__(self):
         if self.cap:
             self.cap.release()
+
+def get_last_detection():
+    """Return the last detection dict (used by Flask /live)."""
+    return last_detection

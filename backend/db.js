@@ -102,6 +102,15 @@ class Database {
         });
     }
 
+    // Direct database access methods for server.js compatibility
+    run(sql, params, callback) {
+        return this.db.run(sql, params, callback);
+    }
+
+    all(sql, params, callback) {
+        return this.db.all(sql, params, callback);
+    }
+
     close() {
         this.db.close((err) => {
             if (err) {

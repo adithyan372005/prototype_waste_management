@@ -52,34 +52,13 @@ const LiveView = () => {
             <div className="loading">Loading...</div>
           ) : (
             <div>
-              <div className="status-item">
-                <span className="status-label">Waste Type:</span>
-                <span className="status-value">
-                  {safeData.class ? sanitizeInput(safeData.class.toUpperCase()) : 'None'}
-                </span>
-              </div>
-              
-              <div className="status-item">
-                <span className="status-label">Wet/Dry:</span>
-                <span className="status-value">
-                  {safeData.wet_dry ? sanitizeInput(safeData.wet_dry.toUpperCase()) : 'None'}
-                </span>
-              </div>
-              
-              <div className="status-item">
-                <span className="status-label">Confidence:</span>
-                <span className="status-value">
-                  {safeData.confidence && typeof safeData.confidence === 'number' 
-                    ? `${Math.min(Math.max(safeData.confidence * 100, 0), 100).toFixed(1)}%` 
-                    : '0%'}
-                </span>
-              </div>
-              
-              <div className="status-item">
-                <span className="status-label">Violation:</span>
-                <span className={`violation-badge ${safeData.is_violation ? 'violation-true' : 'violation-false'}`}>
-                  {safeData.is_violation ? '🚨 VIOLATION' : '✅ OK'}
-                </span>
+              <div className="live-info">
+                <p><b>Type:</b> {safeData.class || 'None'}</p>
+                <p style={{ color: safeData.wet_dry === "dry" ? "green" : "blue" }}>
+                  <b>Wet/Dry:</b> {safeData.wet_dry || "None"}
+                </p>
+                <p><b>Confidence:</b> {safeData.confidence ? (safeData.confidence * 100).toFixed(1) : '0'}%</p>
+                <p><b>Violation:</b> {safeData.is_violation ? "Yes" : "No"}</p>
               </div>
             </div>
           )}

@@ -28,68 +28,69 @@ if (!fs.existsSync(snapshotsDir)) {
 }
 
 // Serve static files (snapshots)
-app.use('/snapshots', express.static(snapshotsDir));
+app.use("/snapshots", express.static(path.join(__dirname, "snapshots")));
 
 // Routes
-app.get('/live', async (req, res) => {
-    try {
-        // Fetch from ML service
-        const response = await axios.get(`${mlUrl}/live`);
-        const mlData = response.data;
-        
-        // Add snapshot URL if violation detected
-        let snapshotUrl = null;
-        if (mlData.is_violation && mlData.class) {
-            // Copy snapshot from ML service to backend snapshots
-            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-            const filename = `violation_${timestamp}.jpg`;
-            snapshotUrl = `http://localhost:4000/snapshots/${filename}`;
-            
-            // Note: In a real implementation, you'd copy the actual snapshot file
-            // For now, we'll just create the URL
-        }
-        
-        // Prepare data for database
-        const logData = {
-            class: mlData.class,
-            wet_dry: mlData.wet_dry,
-            confidence: mlData.confidence,
-            is_violation: mlData.is_violation,
-            snapshot_url: snapshotUrl
-        };
-        
-        // Save to database only if we have a detection
-        if (mlData.class) {
-            await db.insertLog(logData);
-        }
-        
-        // Return the ML data with snapshot URL
-        const responseData = {
-            ...mlData,
-            snapshot_url: snapshotUrl
-        };
-        
-        res.json(responseData);
-    } catch (error) {
-        console.error('Error fetching from ML service:', error.message);
-        res.status(500).json({ 
-            error: 'Failed to fetch detection data',
-            class: null,
-            wet_dry: null,
-            confidence: 0,
-            is_violation: false
-        });
+app.get("/live", async (req, res) => {
+  try {
+    const mlRes = await axios.get(`${process.env.ML_URL}/live`);
+    const data = mlRes.data;
+
+    // Build snapshot URL if exists
+    let snapshotUrl = null;
+    if (data.snapshot_path) {
+      const filename = data.snapshot_path.split("\\").pop().split("/").pop();
+      // Store relative path for database
+      snapshotUrl = `snapshots/${filename}`;
     }
+
+    // Log into DB
+    db.run(
+      `INSERT INTO logs (class, wet_dry, confidence, is_violation, snapshot_url)
+       VALUES (?, ?, ?, ?, ?)`,
+      [
+        data.class || null,
+        data.wet_dry || null,
+        data.confidence || 0,
+        data.is_violation ? 1 : 0,
+        snapshotUrl
+      ]
+    );
+
+    return res.json({
+      ...data,
+      snapshot_path: snapshotUrl ? `http://localhost:${port}/${snapshotUrl}` : null
+    });
+
+  } catch (err) {
+    console.error("Error fetching from ML service:", err);
+    return res.status(500).json({ error: "ML service error" });
+  }
 });
 
-app.get('/logs', async (req, res) => {
-    try {
-        const logs = await db.getAllLogs();
-        res.json(logs);
-    } catch (error) {
-        console.error('Error fetching logs:', error.message);
-        res.status(500).json({ error: 'Failed to fetch logs' });
+app.get("/logs", (req, res) => {
+  db.all(
+    "SELECT * FROM logs ORDER BY timestamp DESC",
+    [],
+    (err, rows) => {
+      if (err) {
+        console.error("Error querying logs:", err);
+        return res.status(500).json({ error: "DB error" });
+      }
+
+      const result = rows.map((row) => ({
+        id: row.id,
+        class: row.class,
+        wet_dry: row.wet_dry,
+        confidence: row.confidence,
+        is_violation: !!row.is_violation,
+        snapshot_path: row.snapshot_url ? `http://localhost:${port}/${row.snapshot_url}` : null,
+        timestamp: row.timestamp,
+      }));
+
+      res.json(result);
     }
+  );
 });
 
 app.get('/billing', async (req, res) => {

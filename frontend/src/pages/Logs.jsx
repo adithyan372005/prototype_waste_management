@@ -68,50 +68,28 @@ const Logs = () => {
         <div className="logs-grid">
           {logs.map((log) => (
             <div key={log.id} className="card log-item">
-              <div className="log-timestamp">
-                {formatTimestamp(log.timestamp)}
+              <div className="log-left">
+                <div>{formatTimestamp(log.timestamp)}</div>
+                {log.snapshot_path ? (
+                  <img
+                    src={log.snapshot_path}
+                    alt="Violation snapshot"
+                    style={{
+                      width: "140px",
+                      height: "100px",
+                      objectFit: "cover",
+                      borderRadius: "8px",
+                    }}
+                  />
+                ) : (
+                  <span>No snapshot</span>
+                )}
               </div>
-              
-              {log.snapshot_url && !imageErrors.has(log.id) && getSecureSnapshotUrl(log.snapshot_url) ? (
-                <img 
-                  src={getSecureSnapshotUrl(log.snapshot_url)} 
-                  alt="Detection snapshot"
-                  className="log-image"
-                  crossOrigin="anonymous"
-                  onError={(e) => {
-                    handleImageError(log.id)
-                    e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjYwIiBoZWlnaHQ9IjYwIiBmaWxsPSIjRjNGNEY2Ii8+CjxwYXRoIGQ9Ik0zMCAzMEgzMFoiIHN0cm9rZT0iIzlBQUNENCIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KPC9zdmc+'
-                  }}
-                />
-              ) : (
-                <div className="log-image" style={{ 
-                  backgroundColor: '#f0f0f0', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'center',
-                  fontSize: '0.8rem',
-                  color: '#666'
-                }}>
-                  🔒 No Image
-                </div>
-              )}
-              
-              <div className="log-class">
-                {log.class ? sanitizeInput(log.class.toUpperCase()) : 'Unknown'}
-              </div>
-              
-              <div>
-                <strong>Wet/Dry:</strong> {log.wet_dry ? sanitizeInput(log.wet_dry.toUpperCase()) : 'Unknown'}
-              </div>
-              
-              <div className="log-confidence">
-                <strong>Confidence:</strong> {log.confidence && typeof log.confidence === 'number' 
-                  ? `${Math.min(Math.max(log.confidence * 100, 0), 100).toFixed(1)}%` 
-                  : '0%'}
-              </div>
-              
-              <div className={`violation-badge ${log.is_violation ? 'violation-true' : 'violation-false'}`}>
-                {log.is_violation ? '🚨 Violation' : '✅ OK'}
+              <div className="log-right">
+                <p>Type: {log.class}</p>
+                <p>Wet/Dry: {log.wet_dry}</p>
+                <p>Confidence: {(log.confidence * 100).toFixed(1)}%</p>
+                <p>{log.is_violation ? "Violation" : "OK"}</p>
               </div>
             </div>
           ))}

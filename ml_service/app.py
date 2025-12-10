@@ -1,25 +1,35 @@
-from flask import Flask, Response, jsonify
+from flask import Flask, Response, jsonify, send_from_directory
 from flask_cors import CORS
-from camera_service import CameraService
-import json
+import camera_service
+import os
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
+CORS(app)
 
 # Initialize camera service
-camera_service = CameraService(bin_type="dry", threshold=0.50)
+camera_service_instance = camera_service.CameraService(bin_type="dry", threshold=0.50)
 
 @app.route('/video_feed')
 def video_feed():
     """Video streaming route. Put this in the src attribute of an img tag."""
-    return Response(camera_service.generate_frames(),
+    return Response(camera_service_instance.generate_frames(),
                     mimetype='multipart/x-mixed-replace; boundary=frame')
 
-@app.route('/live')
+@app.route("/live")
 def live():
-    """Get latest detection result as JSON."""
-    result = camera_service.get_latest_detection()
-    return jsonify(result)
+    result = camera_service.get_last_detection() or {}
+    return jsonify({
+        "class": result.get("class"),
+        "wet_dry": result.get("wet_dry"),
+        "confidence": result.get("confidence") or 0.0,
+        "is_violation": bool(result.get("is_violation")),
+        "snapshot_path": result.get("snapshot_path")
+    })
+
+@app.route("/snapshots/<path:filename>")
+def snapshot_file(filename):
+    folder = os.path.join(os.path.dirname(__file__), "snapshots")
+    return send_from_directory(folder, filename)
 
 @app.route('/health')
 def health():

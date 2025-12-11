@@ -4,15 +4,13 @@ const cors = require('cors');
 const axios = require('axios');
 const path = require('path');
 const fs = require('fs');
-const Database = require('./db');
+const db = require('./waste_logs');
 
 const app = express();
-const port = process.env.PORT || 4000;
-const mlUrl = process.env.ML_URL || 'http://localhost:5001';
-const penaltyRate = parseInt(process.env.PENALTY_PER_INCORRECT) || 10;
-
-// Initialize database
-const db = new Database();
+const ML_URL = process.env.ML_URL || "http://127.0.0.1:5001";
+const PORT = process.env.PORT || 4000;
+const BASE_MONTHLY_FEE = Number(process.env.BASE_MONTHLY_FEE || 1350);
+const PENALTY_PER_VIOLATION = Number(process.env.PENALTY_PER_VIOLATION || 50);
 
 // Middleware
 app.use(cors({
@@ -33,81 +31,91 @@ app.use("/snapshots", express.static(path.join(__dirname, "snapshots")));
 // Routes
 app.get("/live", async (req, res) => {
   try {
-    const mlRes = await axios.get(`${process.env.ML_URL}/live`);
-    const data = mlRes.data;
+    const mlRes = await axios.get(`${ML_URL}/live`);
+    const data = mlRes.data || {};
 
-    // Build snapshot URL if exists
+    const {
+      class: cls,
+      wet_dry,
+      confidence,
+      is_violation,
+      snapshot_path,
+    } = data;
+
     let snapshotUrl = null;
-    if (data.snapshot_path) {
-      const filename = data.snapshot_path.split("\\").pop().split("/").pop();
-      // Store relative path for database
-      snapshotUrl = `snapshots/${filename}`;
+    if (snapshot_path) {
+      const filename = path.basename(snapshot_path);
+      snapshotUrl = `${ML_URL}/snapshots/${filename}`;
     }
 
-    // Log into DB
+    const timestamp = new Date().toISOString();
+
     db.run(
-      `INSERT INTO logs (class, wet_dry, confidence, is_violation, snapshot_url)
-       VALUES (?, ?, ?, ?, ?)`,
-      [
-        data.class || null,
-        data.wet_dry || null,
-        data.confidence || 0,
-        data.is_violation ? 1 : 0,
-        snapshotUrl
-      ]
+      `INSERT INTO logs (class, wet_dry, confidence, is_violation, snapshot_url, timestamp)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [cls || null, wet_dry || null, confidence || 0, is_violation ? 1 : 0, snapshotUrl, timestamp],
+      (err) => {
+        if (err) {
+          console.error("Error inserting log:", err.message);
+        }
+      }
     );
 
     return res.json({
-      ...data,
-      snapshot_path: snapshotUrl ? `http://localhost:${port}/${snapshotUrl}` : null
+      class: cls,
+      wet_dry,
+      confidence,
+      is_violation,
+      snapshot_url: snapshotUrl,
+      timestamp,
     });
-
   } catch (err) {
-    console.error("Error fetching from ML service:", err);
+    console.error("Error fetching from ML service:", err.message);
     return res.status(500).json({ error: "ML service error" });
   }
 });
 
 app.get("/logs", (req, res) => {
   db.all(
-    "SELECT * FROM logs ORDER BY timestamp DESC",
+    `SELECT id, class, wet_dry, confidence, is_violation, snapshot_url, timestamp
+     FROM logs
+     ORDER BY datetime(timestamp) DESC`,
     [],
     (err, rows) => {
       if (err) {
-        console.error("Error querying logs:", err);
+        console.error("Error reading logs:", err.message);
         return res.status(500).json({ error: "DB error" });
       }
-
-      const result = rows.map((row) => ({
-        id: row.id,
-        class: row.class,
-        wet_dry: row.wet_dry,
-        confidence: row.confidence,
-        is_violation: !!row.is_violation,
-        snapshot_path: row.snapshot_url ? `http://localhost:${port}/${row.snapshot_url}` : null,
-        timestamp: row.timestamp,
-      }));
-
-      res.json(result);
+      res.json(rows);
     }
   );
 });
 
-app.get('/billing', async (req, res) => {
-    try {
-        const stats = await db.getBillingStats();
-        const totalPenalty = (stats.incorrect_items || 0) * penaltyRate;
-        
-        res.json({
-            total_items: stats.total_items || 0,
-            incorrect_items: stats.incorrect_items || 0,
-            total_penalty: totalPenalty,
-            currency: "INR"
-        });
-    } catch (error) {
-        console.error('Error fetching billing stats:', error.message);
-        res.status(500).json({ error: 'Failed to fetch billing data' });
+app.get("/billing", (req, res) => {
+  db.all(
+    `SELECT COUNT(*) AS vcount
+     FROM logs
+     WHERE is_violation = 1`,
+    [],
+    (err, rows) => {
+      if (err) {
+        console.error("Error reading violations:", err.message);
+        return res.status(500).json({ error: "DB error" });
+      }
+      const violationCount = rows[0]?.vcount || 0;
+      const penaltyTotal = violationCount * PENALTY_PER_VIOLATION;
+      const baseFee = BASE_MONTHLY_FEE;
+      const totalBill = baseFee + penaltyTotal;
+
+      res.json({
+        base_fee: baseFee,
+        violation_count: violationCount,
+        penalty_per_violation: PENALTY_PER_VIOLATION,
+        penalty_total: penaltyTotal,
+        total_bill: totalBill,
+      });
     }
+  );
 });
 
 app.get('/health', (req, res) => {
@@ -121,8 +129,8 @@ app.use((err, req, res, next) => {
 });
 
 // Start server
-app.listen(port, () => {
-    console.log(`🚀 Backend server running on http://localhost:${port}`);
+app.listen(PORT, () => {
+    console.log(`🚀 Backend server running on http://localhost:${PORT}`);
     console.log(`📊 API endpoints:`);
     console.log(`   GET /live - Live detection data`);
     console.log(`   GET /logs - Detection logs`);
@@ -131,7 +139,7 @@ app.listen(port, () => {
 
 // Graceful shutdown
 process.on('SIGINT', () => {
-    console.log('\n🛑 Shutting down gracefully...');
+    console.log('\\n🛑 Shutting down gracefully...');
     db.close();
     process.exit(0);
 });
